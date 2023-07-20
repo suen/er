@@ -7,7 +7,7 @@ import os
 import http.client, ssl
 from base64 import b64encode
 import traceback
-import tempfile
+import shutil
 import subprocess
 import json
 import socket
@@ -44,9 +44,9 @@ def getEnvVar(key, defaultValue=None):
   value = os.environ.get(key)
   erValue = getErVar(key)
   if (value is None or value == ""):
-      if (erValue is None or erValue == ""):
-        return defaultValue
-      return erValue
+    if (erValue is None or erValue == ""):
+      return defaultValue
+    return erValue
   if erValue is None or erValue == "":
     setErVar(key, value)
   return value
@@ -151,48 +151,51 @@ def sh(cmd, returnOutput=False, ignoreError=False, noLog=False):
 
 
 def toHourMinSec(milliseconds):
-    seconds = milliseconds / 1000
-    minutes = int(seconds / 60)
-    mod_seconds = int(seconds % 60)
-    seconds_str = str(mod_seconds) + "sec"
-    if (minutes > 60):
-        mod_minutes = int(minutes % 60)
-        hours = int(minutes / 60)
-        return str(hours) + "h " + str(mod_minutes) + " min " + seconds_str
-    elif (minutes > 0):
-        return str(minutes) + "min " + seconds_str
+  milliseconds = int(milliseconds % 1000)
+  seconds = milliseconds / 1000
+  minutes = int(seconds / 60)
+  mod_seconds = int(seconds % 60)
+  seconds_str = str(mod_seconds) + "sec"
+  if (minutes > 60):
+      mod_minutes = int(minutes % 60)
+      hours = int(minutes / 60)
+      return str(hours) + "h " + str(mod_minutes) + " min " + seconds_str
+  elif (minutes > 0):
+      return str(minutes) + "min " + seconds_str
+  elif mod_seconds > 0:
     return seconds_str
+  return str(milliseconds) + " ms"
 
 def base64_encode(username, password):
-    token = b64encode(f"{username}:{password}".encode('utf-8')).decode("ascii")
-    return token
+  token = b64encode(f"{username}:{password}".encode('utf-8')).decode("ascii")
+  return token
 
 def getPage(url, username=None, password=None):
-    isSecure = "https" in url
-    
-    domainName = url.replace("https://", "").replace("http://", "")
-    slashIndex = domainName.index(
-        "/") if "/" in domainName else len(domainName)
-    suffix = domainName[slashIndex:] if slashIndex != len(domainName) else "/"
-    domainName = domainName[:slashIndex]
+  isSecure = "https" in url
+  
+  domainName = url.replace("https://", "").replace("http://", "")
+  slashIndex = domainName.index(
+      "/") if "/" in domainName else len(domainName)
+  suffix = domainName[slashIndex:] if slashIndex != len(domainName) else "/"
+  domainName = domainName[:slashIndex]
 
-    conn = None
-    if isSecure:
-      conn = http.client.HTTPSConnection(domainName, context=ssl._create_unverified_context()) 
-    else:
-      conn = http.client.HTTPConnection(domainName)
+  conn = None
+  if isSecure:
+    conn = http.client.HTTPSConnection(domainName, context=ssl._create_unverified_context()) 
+  else:
+    conn = http.client.HTTPConnection(domainName)
 
-    headers = {}
-    if username and password:
-      headers["Authorization"] = "Basic " + base64_encode(username, password)
+  headers = {}
+  if username and password:
+    headers["Authorization"] = "Basic " + base64_encode(username, password)
 
-    conn.request("GET", suffix, headers=headers)
-    resp = conn.getresponse()
+  conn.request("GET", suffix, headers=headers)
+  resp = conn.getresponse()
 
-    if resp.status != 200:
-        return [resp.status, None]
+  if resp.status != 200:
+    return [resp.status, None]
 
-    return [resp.status, resp.read()]
+  return [resp.status, resp.read()]
 
 
 def log(msg):
@@ -200,11 +203,11 @@ def log(msg):
 
 
 def extractKeyValue(text, key):
-    envLines = text.split("\n")
-    nameLine = next(filter(lambda l: key+"=" in l, envLines), "")
-    if (nameLine != ""):
-        return nameLine.replace(key+"=", "")
-    return ""
+  envLines = text.split("\n")
+  nameLine = next(filter(lambda l: key+"=" in l, envLines), "")
+  if (nameLine != ""):
+      return nameLine.replace(key+"=", "")
+  return ""
 
 
 def parseKeyValueFile(filepath):
@@ -380,179 +383,327 @@ class ErContext:
 
 
 class Alias:
-    def __init__(self, er):
-      self.er = er
+  def __init__(self, er):
+    self.er = er
 
-    def prefix(self):
-      return "alias"
+  def prefix(self):
+    return "alias"
 
-    def alias(self):
-      return ["a"]
+  def alias(self):
+    return ["a"]
 
-    def description(self):
-      return "Alias for long chained `er` commands. Once the alias is set, use `er [alias name] to execute the chained `er` commands."
+  def description(self):
+    return "Alias for long chained `er` commands. Once the alias is set, use `er [alias name] to execute the chained `er` commands."
 
-    def arguments(self):
-      return {"command": {"alias": "c", "description": "er command(s) (and arguments) without `er` prefix englobed between quotes \" \". Multiple commands are joined by a '&'."},
-            "name": {"alias": "n", "position":1, "description": "Name of the alias"},
-            "delete": {"alias": "d", "flag": True, "description": "Delete the alias"},
-            "list": {"alias": "l", "flag": True, "description": "List available aliases"}
-      }
+  def arguments(self):
+    return {"command": {"alias": "c", "description": "er command(s) (and arguments) without `er` prefix englobed between quotes \" \". Multiple commands are joined by a '&'."},
+          "name": {"alias": "n", "position":1, "description": "Name of the alias"},
+          "delete": {"alias": "d", "flag": True, "description": "Delete the alias"},
+          "list": {"alias": "l", "flag": True, "description": "List available aliases"}
+    }
+  
+  def isAlias(self, name):
+    nameKey = "alias." + name
+    existingCmd = getErVar(nameKey, "")
+    return existingCmd is not None and existingCmd != ""
+
+  def getAllAlias(self):
+    allVars = getAllErVars()
+    availableAliases = []
+    for var in allVars.keys():
+      if "alias." in var:
+        aliasName = var.replace("alias.", "")
+        cmd = allVars[var]
+        if cmd:
+          availableAliases.append({"alias" : aliasName, "command": cmd})
+    return availableAliases
+
+  def printList(self):
+    all = self.getAllAlias()
+    print("")
+    if (len(all) == 0):
+      print("No alias available\n")
+      return
+
+    print("---- Available aliases ----\n")
+    for kv in all:
+      print("%s : %s"%(kv['alias'], kv['command']))
     
-    def isAlias(self, name):
-      nameKey = "alias." + name
-      existingCmd = getErVar(nameKey, "")
-      return existingCmd is not None and existingCmd != ""
+    print("\n")
 
-    def getAllAlias(self):
-      allVars = getAllErVars()
-      availableAliases = []
-      for var in allVars.keys():
-        if "alias." in var:
-          aliasName = var.replace("alias.", "")
-          cmd = allVars[var]
-          if cmd:
-            availableAliases.append({"alias" : aliasName, "command": cmd})
-      return availableAliases
+  def run(self, argsValue={}):
+    cmdArgs = argsValue["command"]
+    name = argsValue["name"]
+    delete = argsValue["delete"]
+    list = argsValue["list"]
 
-    def printList(self):
-      all = self.getAllAlias()
-      print("")
-      if (len(all) == 0):
-        print("No alias available\n")
-        return
+    if list:
+      self.printList()
+      return
 
-      print("---- Available aliases ----\n")
-      for kv in all:
-        print("%s : %s"%(kv['alias'], kv['command']))
-      
-      print("\n")
+    if not name:
+      self.er.log("--name is expected")
+      self.printList()
+      return
+    
+    nameKey = "alias." + name
+    existingCmd = getErVar(nameKey, "")
 
-    def run(self, argsValue={}):
-      cmdArgs = argsValue["command"]
-      name = argsValue["name"]
-      delete = argsValue["delete"]
-      list = argsValue["list"]
+    if delete:
+      self.er.log("Alias '%s' deleted, was set to '%s'"%(name, existingCmd))
+      setEnvVar(nameKey, "")
+      return
 
-      if list:
-        self.printList()
-        return
+    if cmdArgs:
+      if existingCmd:
+        self.er.log("Alias '%s' is already set to '%s'"%(name, existingCmd))
 
-      if not name:
-        self.er.log("--name is expected")
-        self.printList()
-        return
-      
-      nameKey = "alias." + name
-      existingCmd = getErVar(nameKey, "")
+      setErVar(nameKey, cmdArgs)
+      self.er.log("Alias '%s' set to '%s'"%(name, cmdArgs))
+      return
+    
+    self.er.log("Running '%s' "%(name))
 
-      if delete:
-        self.er.log("Alias '%s' deleted, was set to '%s'"%(name, existingCmd))
-        setEnvVar(nameKey, "")
-        return
-
-      if cmdArgs:
-        if existingCmd:
-          self.er.log("Alias '%s' is already set to '%s'"%(name, existingCmd))
-
-        setErVar(nameKey, cmdArgs)
-        self.er.log("Alias '%s' set to '%s'"%(name, cmdArgs))
-        return
-      
-      self.er.log("Running '%s' "%(name))
-
-      self.er.log("Executing '%s' "%(existingCmd))
-      for cmd in existingCmd.split("&"):
-        cmd = cmd.strip()
-        if not cmd or cmd == "":
-          continue
-        cmdNArgs = cmd.split(" ")
-        self.er.run(cmdNArgs[0], cmdNArgs[1:])
-      
+    self.er.log("Executing '%s' "%(existingCmd))
+    for cmd in existingCmd.split("&"):
+      cmd = cmd.strip()
+      if not cmd or cmd == "":
+        continue
+      cmdNArgs = cmd.split(" ")
+      self.er.run(cmdNArgs[0], cmdNArgs[1:])
+    
 
 
 class Help:
-    def __init__(self, er, scriptName, cmdsProvider):
-      self.er = er
-      self.cmdsProvider = cmdsProvider
-      self.scriptName = scriptName
+  def __init__(self, er, scriptName, cmdsProvider):
+    self.er = er
+    self.cmdsProvider = cmdsProvider
+    self.scriptName = scriptName
 
-    def prefix(self):
-      return "help"
+  def prefix(self):
+    return "help"
 
-    def alias(self):
-      return ["?"]
+  def alias(self):
+    return ["?"]
 
-    def description(self):
-      return "The Help menu"
+  def description(self):
+    return "The Help menu"
 
-    def arguments(self):
-      return {"command": {"alias": "c", "position" : 1, "description": "name/alias of command, empty prints all command help", "default": ""},
-            "full": {"alias": "f", "flag": True, "description": "Full help"}
-      }
+  def arguments(self):
+    return {"command": {"alias": "c", "position" : 1, "description": "name/alias of command, empty prints all command help", "default": ""},
+          "full": {"alias": "f", "flag": True, "description": "Full help"}
+    }
 
-    def run(self, argsValue={}):
-      cmd = argsValue["command"]
-      full = argsValue["full"] or cmd != ""
+  def run(self, argsValue={}):
+    cmd = argsValue["command"]
+    full = argsValue["full"] or cmd != ""
 
-      eligibleCmds = []
-      if (cmd == ""):
-        print("Available commands:\n")
-        print("---------------------")
-        eligibleCmds = self.cmdsProvider()
-      else:
-        eligibleCmds = list(filter(lambda x: cmd in [x.prefix()]+x.alias(), self.cmdsProvider()))
+    eligibleCmds = []
+    if (cmd == ""):
+      print("Available commands:\n")
+      print("---------------------")
+      eligibleCmds = self.cmdsProvider()
+    else:
+      eligibleCmds = list(filter(lambda x: cmd in [x.prefix()]+x.alias(), self.cmdsProvider()))
 
-      if (len(eligibleCmds) == 0 and cmd == ""):
-        print("'%s' is not known command\n" % cmd)
-        self.run()
-        return
+    if (len(eligibleCmds) == 0 and cmd == ""):
+      print("'%s' is not known command\n" % cmd)
+      self.run()
+      return
 
-      if not full:
-        print("\n".join(list(map(self.printCmdBriefHelp, eligibleCmds))))
-      else:
-        print("---------------------\n".join(list(map(self.printCmdFullHelp, eligibleCmds))))
+    if not full:
+      print("\n".join(list(map(self.printCmdBriefHelp, eligibleCmds))))
+    else:
+      print("---------------------\n".join(list(map(self.printCmdFullHelp, eligibleCmds))))
 
-    def printCmdBriefHelp(self, cmd):
-      help = cmd.prefix() + \
-            (" [Alias = " + ", ".join(cmd.alias()) +
-             "]" if len(cmd.alias()) > 0 else "") + "\n"
-      help += "\t" + cmd.description() + "\n"
+  def printCmdBriefHelp(self, cmd):
+    help = cmd.prefix() + \
+          (" [Alias = " + ", ".join(cmd.alias()) +
+            "]" if len(cmd.alias()) > 0 else "") + "\n"
+    help += "\t" + cmd.description() + "\n"
+    return help
+
+  def printCmdFullHelp(self, cmd):
+      help = ">> " + cmd.prefix() + \
+          (" [Alias = " + ", ".join(cmd.alias()) +
+            "]" if len(cmd.alias()) > 0 else "") + "\n"
+      help += "Description:\n\t" + cmd.description() + "\n"
+      help += "Usage :\n\n"
+      help += self.createUsage(cmd) + "\n"
       return help
 
-    def printCmdFullHelp(self, cmd):
-        help = ">> " + cmd.prefix() + \
-            (" [Alias = " + ", ".join(cmd.alias()) +
-             "]" if len(cmd.alias()) > 0 else "") + "\n"
-        help += "Description:\n\t" + cmd.description() + "\n"
-        help += "Usage :\n\n"
-        help += self.createUsage(cmd) + "\n"
-        return help
+  def createUsage(self, cmd):
+    dict = cmd.arguments()
+    if isinstance(dict, str):
+      return dict
 
-    def createUsage(self, cmd):
-      dict = cmd.arguments()
-      if isinstance(dict, str):
-        return dict
+    isFlag = lambda k : "flag" in dict[k].keys() and dict[k]["flag"] is True
+    ret = "\t%s %s %s\n\n"%(self.scriptName, cmd.prefix(), " ".join(map(lambda l : "[--" + l + (" <VALUE>" if not isFlag(l) else "") + "]", dict.keys())));
+    ret +="Parameters:\n"
 
-      isFlag = lambda k : "flag" in dict[k].keys() and dict[k]["flag"] is True
-      ret = "\t%s %s %s\n\n"%(self.scriptName, cmd.prefix(), " ".join(map(lambda l : "[--" + l + (" <VALUE>" if not isFlag(l) else "") + "]", dict.keys())));
-      ret +="Parameters:\n"
+    dictKeys = dict.keys()
+    if (len(dictKeys) == 0):
+      return "";
+    maxPad = max(len(i) for i in dict.keys())
 
-      dictKeys = dict.keys()
-      if (len(dictKeys) == 0):
-        return "";
-      maxPad = max(len(i) for i in dict.keys())
+    for key in dict.keys():
+      param = dict[key]
+      padding = " "*(maxPad - len(key))
+      isFlag = "flag" in param and param["flag"] is True
+      position = int(param["position"]) if "position" in param else None
+      flagPositionParam = " [Flag]" if isFlag else ("[%d]"%(position) if position is not None else "")
+      defaultValue = param["default"] if "default" in param.keys() else None
+      paramValue = "[Default='%s']"%(defaultValue) if defaultValue is not None else "[required]"
+      ret += "\t[--%s -%s]%s :%s %s %s\n"%(key, param['alias'], padding, flagPositionParam, paramValue, param['description'])
+    return ret;
 
-      for key in dict.keys():
-        param = dict[key]
-        padding = " "*(maxPad - len(key))
-        isFlag = "flag" in param and param["flag"] is True
-        position = int(param["position"]) if "position" in param else None
-        flagPositionParam = " [Flag]" if isFlag else ("[%d]"%(position) if position is not None else "")
-        defaultValue = param["default"] if "default" in param.keys() else None
-        paramValue = "[Default='%s']"%(defaultValue) if defaultValue is not None else "[required]"
-        ret += "\t[--%s -%s]%s :%s %s %s\n"%(key, param['alias'], padding, flagPositionParam, paramValue, param['description'])
-      return ret;
+
+class Installer:
+  def __init__(self, er):
+    self.er = er
+  
+  def prefix(self):
+    return "install"
+  
+  def alias(self):
+    return ["ins"]
+
+  def description(self):
+    return "The er.. installer"
+
+  def arguments(self):
+    return {
+      "path" : {"alias": "p", "position": 1, "description": "Path where to install er", "default": self.er.getEnvVar("HOME", "") + "/bin"},
+      "package": {"alias": "k", "flag": True, "description": "Package er to zip archive"}
+    }
+
+  def run(self, argsValue={}):
+    
+    path = argsValue["path"]
+    package = argsValue["package"]
+
+    if package:
+        self.package()
+    else:
+        self.install(path)
+
+  def package(self, path=""):
+    packageDir = os.path.abspath("er-package")
+    if path != "" :
+        packageDir = path + "/" + "er-package"
+    self.er.sh("mkdir -p %s"%(packageDir))
+    self.install(packageDir)
+    shutil.make_archive("er", "zip", packageDir)
+    self.er.log("Er packaged to : %s"%(os.path.dirname(packageDir) + "/self.er.zip"))
+    self.er.sh("rm -r %s"%(packageDir))
+
+  def install(self, path):
+    self.er.log("Installing into %s"%(path))
+    self.er.sh("mkdir -p %s"%(path))
+
+    if (not os.path.exists(path) or not os.path.isdir(path)):
+        self.er.log("--path='%s' does not exist or is not a directory"%(path))
+        return
+    
+    cwd = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(cwd)
+
+    erPath = root + "/er"
+    erToolsDir = root + "/er-tools"
+    if (not os.path.exists(erPath)):
+        self.er.log("%s does not exist. Corrupted install unit."%(erPath))
+        return
+    if (not os.path.exists(erToolsDir)):
+        self.er.log("%s does not exist. Corrupted install unit."%(erToolsDir))
+        return
+
+    self.er.log("Copying er..")
+    self.er.sh("cp -f %s %s"%(erPath, path))
+    
+    self.er.log("Copying er-tools..")
+    self.er.sh("rm -rf %s/er-tools"%(path))
+    self.er.sh("cp -rf %s %s"%(erToolsDir, path))
+
+    sysPath = self.er.getEnvVar("PATH", "")
+    if (path not in sysPath):
+        self.er.log("'%s' is not in PATH env. Please add it to PATH for easy use"%(path))
+
+    self.er.log("Installation successful")
+
+
+class NewErModule:
+  def __init__(self, er):
+    self.er = er
+
+  def prefix(self):
+    return "new-er-module"
+
+  def alias(self):
+    return ["new-mod"]
+
+  def description(self):
+    return "Utility to faciliate development of new module"
+
+  def arguments(self):
+      return {
+          "name": {"alias": "n", "description": "name of the module", "default": "NewModule"},
+          "prefix": {"alias": "n", "description": "prefix of the module and also the name of the script file", "default": "new-module"},
+          "alias": {"alias": "n", "description": "Alias of the module", "default": "nasl"},
+          "description": {"alias": "n", "description": "Description", "default": "New module description"},
+          }
+
+  def run(self, argsValue={}):
+    
+    name = argsValue["name"]
+    prefix = argsValue["prefix"]
+    alias = argsValue["alias"]
+    description = argsValue["description"]
+    
+    generatedContent = self.newModuleScript(name, prefix, alias, description);
+    scriptPath = self.writeToFile(generatedContent, prefix)
+
+    self.er.log("New module created in '%s'"%(scriptPath))
+    self.er.log("Run `er help %s`"%(prefix))
+
+  def writeToFile(self, scriptContent, name):
+    scriptDir = os.path.dirname(__file__)
+    filepath = "%s/%s.py"%(scriptDir, name)
+    with open(filepath, "w") as f:
+        f.write(scriptContent)
+    return filepath
+
+
+  def newModuleScript(self, className, prefix, alias, description):
+      return """
+class %s:
+  def __init__(self, er):
+      self.er = er
+  
+  def prefix(self):
+      return "%s"
+  
+  def alias(self):
+      return ["%s"]
+  
+  def description(self):
+      return "%s"
+  
+  def arguments(self):
+      return {
+          "argument": {"alias": "a", "flag": True, "description": "New argument"},
+      }
+
+  def run(self, argsValue={}):
+      
+      argument = args["argument"]
+      self.er.log("New module")
+
+
+def __module__(er):
+  return %s(er)
+"""%(className, prefix, alias, description, className)
+
+
 
 def signalHandler(signal, frame):
     log("Stopping ...")
@@ -595,7 +746,9 @@ def main():
   help = Help(er, scriptName, lambda: cmds)
   alias = Alias(er)
   er.register(help)
-  er.register(alias)
+  er.register(Alias(er))
+  er.register(Installer(er))
+  er.register(NewErModule(er))
   cmds = er.tools
 
   args = parseArgs()
@@ -619,7 +772,7 @@ def main():
   else:
     ret = er.run(erCmd, cmdArgs)
 
-  print("Total run time : %s" % (getTimeElapsed(startTime)))
+  print("Run time : %s" % (getTimeElapsed(startTime)))
 
   sys.exit(ret)
 
