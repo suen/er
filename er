@@ -14,6 +14,7 @@ import socket
 import platform
 
 debug = True
+erMods = "er-mods"
 
 def openUrl(url):
   system = uname()
@@ -238,7 +239,7 @@ class ErContext:
   def uname(self):
     return uname()
 
-  def getEnvVar(self, varName, defaultValue):
+  def getEnvVar(self, varName, defaultValue=None):
     return getEnvVar(varName, defaultValue)
   
   def setEnvVar(self, varName, varValue):
@@ -608,25 +609,24 @@ class Installer:
     cwd = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(cwd)
 
-    erPath = root + "/er"
-    erToolsDir = root + "/er-tools"
+    erPath = cwd + "/er"
+    erToolsDir = cwd + "/" + erMods
     if (not os.path.exists(erPath)):
         self.er.log("%s does not exist. Corrupted install unit."%(erPath))
         return
-    if (not os.path.exists(erToolsDir)):
-        self.er.log("%s does not exist. Corrupted install unit."%(erToolsDir))
-        return
-
-    self.er.log("Copying er..")
+    self.er.log("Copying er..%s"%(cwd))
     self.er.sh("cp -f %s %s"%(erPath, path))
-    
-    self.er.log("Copying er-tools..")
-    self.er.sh("rm -rf %s/er-tools"%(path))
-    self.er.sh("cp -rf %s %s"%(erToolsDir, path))
+
+    if (not os.path.exists(erToolsDir)):
+      self.er.log("%s does not exist. "%(erToolsDir))
+    else :
+      self.er.log("Copying %s.."%(erMods))
+      self.er.sh("rm -rf %s/%s"%(path, erMods))
+      self.er.sh("cp -rf %s %s"%(erToolsDir, path))
 
     sysPath = self.er.getEnvVar("PATH", "")
     if (path not in sysPath):
-        self.er.log("'%s' is not in PATH env. Please add it to PATH for easy use"%(path))
+        self.er.log("'%s' is not in PATH env. Consider adding it to PATH for easy use"%(path))
 
     self.er.log("Installation successful")
 
@@ -647,9 +647,9 @@ class NewErModule:
   def arguments(self):
       return {
           "name": {"alias": "n", "description": "name of the module", "default": "NewModule"},
-          "prefix": {"alias": "n", "description": "prefix of the module and also the name of the script file", "default": "new-module"},
-          "alias": {"alias": "n", "description": "Alias of the module", "default": "nasl"},
-          "description": {"alias": "n", "description": "Description", "default": "New module description"},
+          "prefix": {"alias": "p", "description": "prefix of the module and also the name of the script file", "default": "new-module"},
+          "alias": {"alias": "a", "description": "Alias of the module", "default": "nasl"},
+          "description": {"alias": "d", "description": "Description", "default": "New module description"},
           }
 
   def run(self, argsValue={}):
@@ -667,7 +667,7 @@ class NewErModule:
 
   def writeToFile(self, scriptContent, name):
     scriptDir = os.path.dirname(__file__)
-    filepath = "%s/%s.py"%(scriptDir, name)
+    filepath = "%s/%s/%s.py"%(scriptDir, erMods, name)
     with open(filepath, "w") as f:
         f.write(scriptContent)
     return filepath
@@ -677,26 +677,29 @@ class NewErModule:
       return """
 class %s:
   def __init__(self, er):
-      self.er = er
+    self.er = er
   
   def prefix(self):
-      return "%s"
+    return "%s"
   
   def alias(self):
-      return ["%s"]
+    return ["%s"]
   
   def description(self):
-      return "%s"
+    return "%s"
   
   def arguments(self):
-      return {
-          "argument": {"alias": "a", "flag": True, "description": "New argument"},
-      }
+    return {
+          "flag-argument": {"alias": "a", "flag": True, "description": "New flag argument"},
+          "value-argument": {"alias": "a", "description": "New flag argument", "default": "DEFAULT_VALUE"},
+    }
 
   def run(self, argsValue={}):
+    flagArgument = argsValue["flag-argument"]
+    valueArgument = argsValue["value-argument"]
       
-      argument = args["argument"]
-      self.er.log("New module")
+    self.er.log("New module")
+    self.er.log("Launched with --flag-argument=%%s --value-argument=%%s"%%(flagArgument, valueArgument))
 
 
 def __module__(er):
@@ -725,7 +728,7 @@ def main():
   signal.signal(signal.SIGINT, signalHandler)
   scriptName = getScriptName()
 
-  scriptDir = os.path.dirname(__file__) + "/er-tools"
+  scriptDir = os.path.dirname(__file__) + "/er-mods"
   sys.path.append(scriptDir)
   if not os.path.isdir(scriptDir):
     os.makedirs(scriptDir)
