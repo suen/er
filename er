@@ -109,16 +109,16 @@ def checkEnvVars(varNames):
     
 
 def getTimeElapsed(lastTime):
-    diff_seconds = int((time.time() - lastTime)*1000)
-    return toHourMinSec(diff_seconds)
+  diff_seconds = int((time.time() - lastTime)*1000)
+  return toHourMinSec(diff_seconds)
 
 
 def getTime():
-    now = time.localtime()
-    def paddedDigit(x): return str(x).zfill(2)
-    dateTime = "%s:%s:%s" % (paddedDigit(now.tm_hour), paddedDigit(
-        now.tm_min), paddedDigit(now.tm_sec))
-    return dateTime
+  now = time.localtime()
+  def paddedDigit(x): return str(x).zfill(2)
+  dateTime = "%s:%s:%s" % (paddedDigit(now.tm_hour), paddedDigit(
+      now.tm_min), paddedDigit(now.tm_sec))
+  return dateTime
 
 
 def getDate():
@@ -357,28 +357,28 @@ class ErContext:
     ret = 0
     eligibleCmds = list(filter(lambda c: cmd in [c.prefix()]+c.alias(), self.tools))
     if (len(eligibleCmds) != 0):
-        try:
-            if cmdArgs is None:
-              cmdArgs = []
-            cmdToRun = eligibleCmds[0]
-            self.log("--- %s ---"%(cmdToRun.prefix()))
-            parsedArgs = self.parseArgs(cmdToRun.arguments(), cmdArgs)
-            cmdToRun.run(parsedArgs)
-        except Exception as e:
-            msg = e.args[0]
-            if (msg is not None):
-              self.log("Error : %s"%msg)
-            else:
-              self.log("Invocation of command '%s' went wrong"%(cmd))
-            if debug:
-              traceback.print_exc(file=sys.stderr)
-              sys.stderr.write(str(e) + "\n")
-            ret = 1
+      try:
+          if cmdArgs is None:
+            cmdArgs = []
+          cmdToRun = eligibleCmds[0]
+          self.log("--- %s ---"%(cmdToRun.prefix()))
+          parsedArgs = self.parseArgs(cmdToRun.arguments(), cmdArgs)
+          cmdToRun.run(parsedArgs)
+      except Exception as e:
+          msg = e.args[0]
+          if (msg is not None):
+            self.log("Error : %s"%msg)
+          else:
+            self.log("Invocation of command '%s' went wrong"%(cmd))
+          if debug:
+            traceback.print_exc(file=sys.stderr)
+            sys.stderr.write(str(e) + "\n")
+          ret = 1
     elif cmd != "":
       self.log("Cmd '%s' not found. Execute `er help` to get list of available commands"%(cmd))
     else:
-        print("\nUsage : \n %s <command> [command args]\n" % sys.argv[0])
-        ret = 1
+      print("\nUsage : \n %s <command> [command args]\n" % sys.argv[0])
+      ret = 1
     return ret
 
 
@@ -525,13 +525,13 @@ class Help:
     return help
 
   def printCmdFullHelp(self, cmd):
-      help = ">> " + cmd.prefix() + \
-          (" [Alias = " + ", ".join(cmd.alias()) +
-            "]" if len(cmd.alias()) > 0 else "") + "\n"
-      help += "Description:\n\t" + cmd.description() + "\n"
-      help += "Usage :\n\n"
-      help += self.createUsage(cmd) + "\n"
-      return help
+    help = ">> " + cmd.prefix() + \
+        (" [Alias = " + ", ".join(cmd.alias()) +
+          "]" if len(cmd.alias()) > 0 else "") + "\n"
+    help += "Description:\n\t" + cmd.description() + "\n"
+    help += "Usage :\n\n"
+    help += self.createUsage(cmd) + "\n"
+    return help
 
   def createUsage(self, cmd):
     dict = cmd.arguments()
@@ -584,14 +584,14 @@ class Installer:
     package = argsValue["package"]
 
     if package:
-        self.package()
+      self.package()
     else:
-        self.install(path)
+      self.install(path)
 
   def package(self, path=""):
-    packageDir = os.path.abspath("er-package")
+    packageDir = os.path.abspath("er-mods")
     if path != "" :
-        packageDir = path + "/" + "er-package"
+      packageDir = path + "/" + "er-mods"
     self.er.sh("mkdir -p %s"%(packageDir))
     self.install(packageDir)
     shutil.make_archive("er", "zip", packageDir)
@@ -603,8 +603,8 @@ class Installer:
     self.er.sh("mkdir -p %s"%(path))
 
     if (not os.path.exists(path) or not os.path.isdir(path)):
-        self.er.log("--path='%s' does not exist or is not a directory"%(path))
-        return
+      self.er.log("--path='%s' does not exist or is not a directory"%(path))
+      return
     
     cwd = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(cwd)
@@ -612,8 +612,8 @@ class Installer:
     erPath = cwd + "/er"
     erToolsDir = cwd + "/" + erMods
     if (not os.path.exists(erPath)):
-        self.er.log("%s does not exist. Corrupted install unit."%(erPath))
-        return
+      self.er.log("%s does not exist. Corrupted install unit."%(erPath))
+      return
     self.er.log("Copying er..%s"%(cwd))
     self.er.sh("cp -f %s %s"%(erPath, path))
 
@@ -626,7 +626,7 @@ class Installer:
 
     sysPath = self.er.getEnvVar("PATH", "")
     if (path not in sysPath):
-        self.er.log("'%s' is not in PATH env. Consider adding it to PATH for easy use"%(path))
+      self.er.log("'%s' is not in PATH env. Consider adding it to PATH for easy use"%(path))
 
     self.er.log("Installation successful")
 
@@ -645,12 +645,12 @@ class NewErModule:
     return "Utility to faciliate development of new module"
 
   def arguments(self):
-      return {
-          "name": {"alias": "n", "description": "name of the module", "default": "NewModule"},
-          "prefix": {"alias": "p", "description": "prefix of the module and also the name of the script file", "default": "new-module"},
-          "alias": {"alias": "a", "description": "Alias of the module", "default": "nasl"},
-          "description": {"alias": "d", "description": "Description", "default": "New module description"},
-          }
+    return {
+      "name": {"alias": "n", "description": "name of the module", "default": "NewModule"},
+      "prefix": {"alias": "p", "description": "prefix of the module and also the name of the script file", "default": "new-module"},
+      "alias": {"alias": "a", "description": "Alias of the module", "default": "nasl"},
+      "description": {"alias": "d", "description": "Description", "default": "New module description"},
+      }
 
   def run(self, argsValue={}):
     
@@ -674,7 +674,7 @@ class NewErModule:
 
 
   def newModuleScript(self, className, prefix, alias, description):
-      return """
+    return """
 class %s:
   def __init__(self, er):
     self.er = er
@@ -709,21 +709,21 @@ def __module__(er):
 
 
 def signalHandler(signal, frame):
-    log("Stopping ...")
-    sys.exit(-1)
+  log("Stopping ...")
+  sys.exit(-1)
 
 
 def parseArgs():
-    if (len(sys.argv) == 1):
-        return None
-    return [sys.argv[1], sys.argv[2:]]
+  if (len(sys.argv) == 1):
+    return None
+  return [sys.argv[1], sys.argv[2:]]
 
 
 def getScriptName():
-    path = sys.argv[0]
-    return path[path.rindex("/")+1:] if ("/" in path) else path
+  path = sys.argv[0]
+  return path[path.rindex("/")+1:] if ("/" in path) else path
 
-  
+
 def main():
   signal.signal(signal.SIGINT, signalHandler)
   scriptName = getScriptName()
