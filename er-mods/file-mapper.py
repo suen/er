@@ -68,6 +68,16 @@ class FormatMapper:
                 "decimal-separator": ".",
                 "default-debit-account": "current",
                 },
+            "amex" : {
+                "delimiter": ",", 
+                "quotechar": '"', 
+                "header": 1,
+                "columns": [DATE_OPERATION, DESCRIPTION, AMOUNT],
+                "date-format": "%m/%d/%Y",
+                "decimal-separator": ",",
+                "default-debit-account": "amex",
+                "debit-flow" : "+",
+                },
 
         }
 
@@ -86,8 +96,9 @@ class FormatMapper:
         debitAccount = format["default-debit-account"]
         creditAccount = format["default-credit-account"] if ("default-credit-account" in format) else "misc"
         payee = format["default-payee"] if ("default-payee" in format) else "Payee"
+        debitFlowSign = int(format.get("debit-flow", "-") + "1")
 
-        templateRow = {"default-debit-account": debitAccount, "default-credit-account": creditAccount, "payee": payee}
+        templateRow = {"default-debit-account": debitAccount, "default-credit-account": creditAccount, "payee": payee, "debit-flow-sign": debitFlowSign}
         for col in columns:
             templateRow[col] = ""
 
@@ -148,10 +159,21 @@ class FormatMapper:
             amountValue = row[AMOUNT]
             amount = "€{:.2f}".format(abs(amountValue))
             payee = row["payee"]
-            creditAccount = row["default-credit-account"] if amountValue < 0 else row["default-debit-account"]
-            debitAccount = row["default-debit-account"] if amountValue < 0 else row["default-credit-account"]
+
+            if (amountValue < 0):
+                creditAccount = row["default-credit-account"]
+                debitAccount = row["default-debit-account"]
+            else:
+                creditAccount = row["default-debit-account"]
+                debitAccount = row["default-credit-account"]
+
+            if (row["debit-flow-sign"] > 0):
+                print("changing debit direction")
+                tmp = creditAccount
+                creditAccount = debitAccount
+                debitAccount = tmp
+
             description = row[DESCRIPTION]
-            #print("%s\t%s\n\t;%s\n\t%s\n\t%s\n\t%s\n"(date, payee, description, creditAccount, amount, debitAccount))
             print(date+ "\t" + payee + "\n\t;"+ description + "\n\t"+ creditAccount + "\t" + amount + "\n\t" + debitAccount + "\n")
             
                 
