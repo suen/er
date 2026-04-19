@@ -8,6 +8,7 @@ CATEGORY_1="CATEGORY_1"
 CATEGORY_2="CATEGORY_2"
 AMOUNT="AMOUNT"
 COMMENT="COMMENT"
+SUPPLIER_FOUND="SUPPLIER_FOUND"
 ACCOUNT_NUMBER="ACCOUNT_NUM"
 ACCOUNT_LABEL="ACCOUNT_LABEL"
 ACCOUNT_BALANCE="ACCOUNT_BAL"
@@ -32,23 +33,23 @@ class FormatMapper:
 
     def formats(self):
         return {
-            "boursorama" : {
+            "bourso" : {
                 "delimiter": ";", 
                 "quotechar": '"', 
                 "header": 1,
-                "columns": [DATE_OPERATION, DATE_VALUATION, DESCRIPTION, CATEGORY_1, CATEGORY_2, AMOUNT, COMMENT, ACCOUNT_NUMBER, ACCOUNT_LABEL, ACCOUNT_BALANCE],
+                "columns": [DATE_OPERATION, DATE_VALUATION, DESCRIPTION, CATEGORY_1, CATEGORY_2, SUPPLIER_FOUND, AMOUNT, COMMENT, ACCOUNT_NUMBER, ACCOUNT_LABEL, ACCOUNT_BALANCE],
                 "date-format": "%Y-%m-%d",
                 "decimal-separator": ",",
                 "default-debit-account": "bourso",
                 },
-            "bourso" : {
-                "delimiter": "\t", 
-                "quotechar": '"', 
+            "fortuneo" : {
+                "delimiter": ";", 
+                "quotechar": '', 
                 "header": 1,
-                "columns": [DATE_OPERATION, DATE_VALUATION, DESCRIPTION, AMOUNT, CURRENCY],
+                "columns": [DATE_OPERATION, DATE_VALUATION, DESCRIPTION, AMOUNT, ACCOUNT_BALANCE],
                 "date-format": "%d/%m/%Y",
-                "decimal-separator": ".",
-                "default-debit-account": "bourso",
+                "decimal-separator": ",",
+                "default-debit-account": "fortuneo",
                 },
             "wise" : {
                 "delimiter": ",", 
@@ -84,7 +85,8 @@ class FormatMapper:
     def arguments(self):
         return {
             "file": {"alias": "f", "description": "Path to file"},
-            "format": {"alias": "o", "description": "One of the known formats. Available formats : " + ", ".join(self.formats())}
+            "format": {"alias": "o", "description": "One of the known formats. Available formats : " + ", ".join(self.formats())},
+            "last-date": {"alias": "d", "description": "Last date in yyyy-mm-dd"}
         }
 
 
@@ -104,9 +106,13 @@ class FormatMapper:
 
         rows = []
         with open(file) as csvfile:
+            quotechar = None if quotechar == "" else quotechar
             reader = csv.reader(csvfile, delimiter=delimiter, quotechar=quotechar)
             headerCount = 0
             for line in reader:
+                if len(columns) != len(line):
+                    print("Number of columns expected=%d, found=%d"%(len(columns), len(line)))
+                    raise Exception("Column : " + str(columns) + "\nline: " + str(line))
                 if headerCount < nbHeaders :
                     headerCount += 1
                     continue    
@@ -135,7 +141,10 @@ class FormatMapper:
                 if colName in dateColumns:
                     row[colName] = self.parseDate(row[colName], dateFormat)
                 elif colName in amountColumns:
-                    row[colName] = self.parseAmount(row[colName], decimalSeparator)
+                    try:
+                        row[colName] = self.parseAmount(row[colName], decimalSeparator)
+                    except:
+                        raise Exception("Could not parse ", row)
 
         return document
 
@@ -148,17 +157,23 @@ class FormatMapper:
             return dateString
         return datetime.datetime.strptime(dateString.strip(), format)
 
-    def print(self, rows):
+    def print(self, rows, lastDate=None):
         sortedrows = sorted(rows, key=lambda row : row[DATE_OPERATION])
         for row in sortedrows:
             date = row[DATE_OPERATION]
             if date is None:
                 self.er.log("skipping " + row)
                 continue
-            date = date.strftime("%m/%d")
+
+            formattedDate = date.strftime("%m/%d")
             amountValue = row[AMOUNT]
             amount = "€{:.2f}".format(abs(amountValue))
             payee = row["payee"]
+            description = row[DESCRIPTION]
+
+            if lastDate is not None and lastDate >= date:
+                self.er.log("skipped because of date : Line [%s] [%s] [%s]"%(formattedDate, description, amount))
+                continue        
 
             if (amountValue < 0):
                 creditAccount = row["default-credit-account"]
@@ -168,25 +183,26 @@ class FormatMapper:
                 debitAccount = row["default-credit-account"]
 
             if (row["debit-flow-sign"] > 0):
-                print("changing debit direction")
                 tmp = creditAccount
                 creditAccount = debitAccount
                 debitAccount = tmp
-
-            description = row[DESCRIPTION]
-            print(date+ "\t" + payee + "\n\t;"+ description + "\n\t"+ creditAccount + "\t" + amount + "\n\t" + debitAccount + "\n")
+            print(formattedDate+ "\t" + payee + "\n\t;"+ description + "\n\t"+ creditAccount + "\t" + amount + "\n\t" + debitAccount + "\n")
             
                 
     def run(self, argsValue={}):
         
         file = argsValue["file"]
         formatName = argsValue["format"]
+        lastDateParam = argsValue.get("last-date", None)
+        lastDate = None
+        if (lastDateParam is not None):
+            lastDate = self.parseDate(lastDateParam, "%Y-%m-%d")
         print(formatName)
         format = self.formats()[formatName]
         document = self.tokenize(file, format)
         document = self.parse(document)
 
-        self.print(document["rows"])
+        self.print(document["rows"], lastDate)
 
     def findPayee(self, payee):
         pass
